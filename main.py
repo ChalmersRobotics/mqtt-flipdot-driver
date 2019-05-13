@@ -109,9 +109,40 @@ class MQTTDriver:
             logging.debug("Got message for unknown display '%s", name)
 
 
-    def handle_action(self, display, action, data):
-        logging.info("Handling '%s' with data '%s'", action, data)
-        # TODO: implement stuff here!
+    def handle_action(self, display: DisplayBuffer, action, data):
+        logging.debug("Handling '%s' with data '%s'", action, data)
+
+        # only do basic text action for now
+        if action != "text":
+            return
+
+        # format to look for: {X:Y:Font:Text goes here}
+        # example: {0:0:SMALL:This is a lot if nice text :)}
+        # multiple text pieces can be in the same message, just put them next to each other like so
+        # "{0:0:SMALL:This is the first text}{0:10:SMALL:This is the second text!}
+
+        # https://regexr.com/4dt6p
+        texts = re.findall("{(\d+):(\d+):(\w+):(.+?)}", data)
+        
+        # if nothing was found, just use the raw text and some default font
+        if not texts:
+            logging.debug("No valid text format found, using raw payload instead")
+            display.put_text(data, 0, 0)
+        else:
+            for text in texts:
+                # make sure font exists
+                if not hasattr(Font, text[2]):
+                    logging.debug("Font '%s' not recognized", text[2])
+                    continue
+        
+                display.put_text(text[3], x=int(text[0]), y=int(text[1]), font=Font[text[2]])
+
+
+        # flush display data
+        buffer = display.finalize_buffer()
+        logging.debug("Sending %s", buffer)
+        self.port.write(buffer)
+
 
 
 def main():
