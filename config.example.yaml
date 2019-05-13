@@ -1,0 +1,28 @@
+mqtt:
+
+  # an unique ID for identifying this publisher in MQTT
+  id: UniqueIDHere
+
+  # connection settings for the MQTT broker
+  broker:
+    host: localhost
+    port: 1883
+
+    # uncomment to use authentication
+    #username: user
+    #password: pass
+  
+  # what topic to listen on
+  base_topic: flipdot
+
+driver:
+
+  # serial port and baudrate to use (leave blank for loopback)
+  port: COM1
+  baudrate: 4800
+
+  # each of the displays connected with their friendly name, address, width and height
+  display:
+    - {name: display1, address: 0x06, width: 42, height: 16}
+    - {name: display2, address: 0x07, width: 112, height: 16}
+

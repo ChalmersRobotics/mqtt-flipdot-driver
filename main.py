@@ -1,36 +1,131 @@
-import serial
-import io
+import serial, yaml
+import io, signal
 import time, datetime
+import logging
+import re
+
+import paho.mqtt.client as mqtt
+import paho.mqtt.subscribe as subscribe
 
 from display import DisplayBuffer, Font
 
-def main():
+# config file to load
+config_filename = "config.yaml"
 
-    # 0x06 small display (42x16), 0x07 large display (112x16)
-    smallSign = DisplayBuffer(0x06, 42, 16)
-    largeSign = DisplayBuffer(0x07, 112, 16)
+class MQTTDriver:
+    def __init__(self, config):
+        self.config = config
+        self.port = None
+        self.mqttClient = None
+        self.displays = {}
 
-    with serial.serial_for_url("hwgrep://", baudrate=4800) as port:
+
+    def run(self):
+        # register sigint handler
+        signal.signal(signal.SIGINT, self.handle_sigint)
+
+        driver_cfg = self.config['driver']
+
+        # try to open the serial port
+        portname = driver_cfg['port'] or 'loop://'
+        logging.info("Opening serial port '%s' ...", portname)
+        self.port = serial.serial_for_url(portname, baudrate=driver_cfg['baudrate'])
+
+        # iterate through each configured display and create a DisplayBuffer for each one of them
+        for disp in driver_cfg['display']:        
+            self.displays[disp['name']] = DisplayBuffer(disp['address'], disp['width'], disp['height'])
         
-        while True:
-            # put some stuff 
-            smallSign.put_text(datetime.datetime.now().strftime("%H:%M:%S"), 0, 4, Font.SMALL)
+        # connect to mqtt and let it do its thing
+        self.mqtt_connect()
+        self.mqttClient.loop_forever()
 
-            #largeSign.put_text(datetime.datetime.now().strftime("%y:%m:%d %H:%M:%S"), 0, 8, SignFont.SMALL)
+        # disconnect was called, close port
+        logging.info("MQTT loop exited, closing port ...")
 
-            # Write complete buffer to serial port
-            buffer = largeSign.finalize_buffer()
+        self.port.close()
 
-            # try to combine the data into a sigle write just for fun ;)
-            buffer.extend(smallSign.finalize_buffer())
+        logging.info("Bye!")
 
-            port.write(buffer)
+    def handle_sigint(self, signal, frame):
+        logging.info("Caught SIGINT, stopping...")
 
-            # print buffer for debugging
-            print(','.join('0x{:02X}'.format(x) for x in buffer))
+        if self.mqttClient:
+            self.mqttClient.disconnect()
 
-            time.sleep(1)
+    def mqtt_connect(self):
+        logging.info("Setting up MQTT...")
 
+        # create client
+        self.mqttClient = mqtt.Client(self.config['mqtt']['id'])
+        
+        # setup callback(s)
+        self.mqttClient.on_connect = self.on_connect
+        self.mqttClient.on_disconnect = self.on_disconnect
+        self.mqttClient.on_message = self.on_message
+
+        # load broker config
+        broker = self.config['mqtt']['broker']
+        
+        # check to see if username and password is set
+        if('username' in broker and 'password' in broker):
+            logging.info("Using MQTT authentication")
+            # set username and password for MQTT client
+            self.mqttClient.username_pw_set(broker['username'], broker['password'])
+
+        # connect
+        logging.info("Connecting to broker @ %s:%s ...", broker['host'], broker['port'])
+        self.mqttClient.connect(broker['host'], port=broker['port'])
+
+        logging.info("Connection successfull")
+
+    # MQTT callback(s)
+    def on_connect(self, client, userdata, flags, rc):
+        logging.debug("MQTT connected (code=%s) ", rc)
+
+        # subscribe to the configured topic and all its subtopics
+        client.subscribe(self.config['mqtt']['base_topic']+"/#")
+
+    def on_disconnect(self, client, userdata, rc):
+        logging.debug("MQTT disconnected (code=%s)", rc)
+ 
+
+    def on_message(self, client, userdata, message):
+        # parse what display to use and what action to do
+        m = re.search("flipdot\/(\w+)\/(\w+)", message.topic)
+        
+        # no match?
+        if not m:
+            logging.debug("Got message on unrecognized topic '%s' with payload '%s", message.topic, message.payload)
+            return
+
+        # get matches
+        name = m.group(1)
+        action = m.group(2)
+
+        # check that the chosen device exist
+        if name in self.displays:
+            self.handle_action(self.displays[name], action, str(message.payload))
+        else:
+            logging.debug("Got message for unknown display '%s", name)
+
+
+    def handle_action(self, display, action, data):
+        logging.info("Handling '%s' with data '%s'", action, data)
+        # TODO: implement stuff here!
+
+
+def main():
+    # initialize logger
+    logging.basicConfig(level=logging.DEBUG, format='[%(asctime)s] %(levelname)s %(message)s')#, datefmt='%Y-%m-%d %H:%M:%S')
+
+    # read config file
+    logging.info("Using config file " + config_filename)
+    with open(config_filename, 'r') as f:
+        cfg = yaml.load(f, Loader=yaml.SafeLoader)
+
+    # let driver do its thing    
+    driver = MQTTDriver(cfg)
+    driver.run()
             
 if __name__ == "__main__":
     main()
