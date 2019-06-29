@@ -86,10 +86,15 @@ class MQTTDriver:
         client.subscribe(self.config['mqtt']['base_topic']+"/#")
 
     def on_disconnect(self, client, userdata, rc):
-        logging.debug("MQTT disconnected (code=%s)", rc)
- 
+        logging.debug("MQTT disconnected (code=%s)", rc) 
 
     def on_message(self, client, userdata, message):
+        try:
+            self.parse_message(message)
+        except Exception as e:
+            logging.exception(e)
+
+    def parse_message(self, message):
         # parse what display to use and what action to do
         m = re.search("flipdot\/(\w+)\/(\w+)", message.topic)
         
@@ -104,7 +109,7 @@ class MQTTDriver:
 
         # check that the chosen device exist
         if name in self.displays:
-            self.handle_action(self.displays[name], action, str(message.payload))
+            self.handle_action(self.displays[name], action, message.payload.decode("utf-8"))
         else:
             logging.debug("Got message for unknown display '%s", name)
 
@@ -127,15 +132,14 @@ class MQTTDriver:
         # if nothing was found, just use the raw text and some default font
         if not texts:
             logging.debug("No valid text format found, using raw payload instead")
-            display.put_text(data, 0, 0)
+            display.put_text(self.text_convert(data), 0, 0)
         else:
             for text in texts:
                 # make sure font exists
                 if not hasattr(Font, text[2]):
                     logging.debug("Font '%s' not recognized", text[2])
                     continue
-        
-                display.put_text(text[3], x=int(text[0]), y=int(text[1]), font=Font[text[2]])
+                display.put_text(self.text_convert(text[3]), x=int(text[0]), y=int(text[1]), font=Font[text[2]])
 
 
         # flush display data
@@ -143,7 +147,14 @@ class MQTTDriver:
         logging.debug("Sending %s", buffer)
         self.port.write(buffer)
 
+    def text_convert(self, text:str) -> str:
+        # converts special characters like ÅÄÖ and åäö to what the display expects
+        for (o, r) in [('å', '}'), ('ä', '{'), ('ö', '|'),('Å', ']'), ('Ä', '['), ('Ö', '\\')]:
+            text = text.replace(o, r)
+        
+        return text
 
+ 
 
 def main():
     # initialize logger
