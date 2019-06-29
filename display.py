@@ -66,7 +66,7 @@ class DisplayBuffer:
         self.buffer.extend([0xd0, self.width])  # width 
         self.buffer.extend([0xd1, self.height]) # height 
 
-    def put_text(self, text:str,  x: int = 0, y: int = 0, font: Font = Font.SMALL):
+    def put_text(self, text:str,  x: int = 0, y: int = 0, font: Font = Font.SMALL_F):
         # set position (TODO: make the position aware of the font size, y-coordinate seems a bit fishy xD )
         self.buffer.extend([0xd2, x]) # x coordinate
         self.buffer.extend([0xd3, y]) # y coordinate
