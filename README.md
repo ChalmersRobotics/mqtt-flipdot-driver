@@ -33,7 +33,7 @@ pipenv install
 
 This will install all required dependencies.
 
-### Without 'pipenv'
+### Without `pipenv`
 
 If `pipenv` somehow didn't work (happens on Raspberry Pi because Python 3.7.0 is not yet available for it as of this writing) or is not available, use the following command to install the required dependencies manually.
 
@@ -50,7 +50,7 @@ After modifying the configuration to your liking, the driver is ready to accept 
 Currently, the only action available is `text` and expects an *array of objects*, each with the following keys:
 
 * `font` - a string representing what font to use, defaults to "SMALL_F"
-* `x` and `y` - numbers defining the position of the text on the display, defaults to *0*
+* `x` and `y` - numbers defining the position of the text on the display, defaults to 0
 * `text` - the string of text to write to the display, defaults to "?"
 
 As an example, here is the payload for displaying the text "Hello World" on two lines using the *F5* font with a small margin to the left:
@@ -58,7 +58,7 @@ As an example, here is the payload for displaying the text "Hello World" on two 
 ```json
 [
     {"font": "F5", "x": 5, "y": 0, "text": "Hello"},
-    {"font": "F5", "x": 5, "y": 7, "text": "World"},
+    {"font": "F5", "x": 5, "y": 7, "text": "World"}
 ]
 ```
 
