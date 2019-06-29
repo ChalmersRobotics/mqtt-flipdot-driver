@@ -1,4 +1,4 @@
-import serial, yaml
+import serial, yaml, json
 import io, signal
 import time, datetime
 import logging
@@ -120,27 +120,33 @@ class MQTTDriver:
         # only do basic text action for now
         if action != "text":
             return
-
-        # format to look for: {X:Y:Font:Text goes here}
-        # example: {0:0:SMALL:This is a lot if nice text :)}
-        # multiple text pieces can be in the same message, just put them next to each other like so
-        # "{0:0:SMALL:This is the first text}{0:10:SMALL:This is the second text!}
-
-        # https://regexr.com/4dt6p
-        texts = re.findall("{(\d+):(\d+):(\w+):(.+?)}", data)
         
-        # if nothing was found, just use the raw text and some default font
-        if not texts:
-            logging.debug("No valid text format found, using raw payload instead")
-            display.put_text(self.text_convert(data), 0, 0)
-        else:
-            for text in texts:
-                # make sure font exists
-                if not hasattr(Font, text[2]):
-                    logging.debug("Font '%s' not recognized", text[2])
-                    continue
-                display.put_text(self.text_convert(text[3]), x=int(text[0]), y=int(text[1]), font=Font[text[2]])
+        # format is a simple JSON array of objects of the form:
+        # {
+        #   "font": "F64",
+        #   "x": 0,
+        #   "y": 0,
+        #   "text": "Text to display here!"
+        # }
+        # both font, x and y are optional and have the default values "SMALL_F" , 0 and 0 respectively
 
+        
+        try:
+            # parse data as JSON, assuming its an array of objects
+            parts_list = json.loads(data)
+
+            # write all text parts to the screen with default values for the unspecified information
+            for string in parts_list:
+                display.put_text(
+                    self.text_convert(string.get('text', "?")), 
+                    x=string.get('x', 0), 
+                    y=string.get('y', 0), 
+                    font=getattr(Font, string.get('font', ""), Font.SMALL_F)
+                )
+
+        except json.decoder.JSONDecodeError as e:
+            logging.debug("There was an error while parsing data as JSON, using raw payload instead: " + str(e))
+            display.put_text(self.text_convert(data), 0, 0)            
 
         # flush display data
         buffer = display.finalize_buffer()
